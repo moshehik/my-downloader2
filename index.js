@@ -1,10 +1,10 @@
 const express = require('express');
 const ytdl = require('@distube/ytdl-core');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // שינוי לפורט של Render
 
 app.get('/', (req, res) => {
-    res.send("השרת מוכן. השתמש בנתיב /watch?id=YOUR_ID");
+    res.send("השרת פועל! נסה להוסיף /watch?id=aqz-KE-bpKQ לשורת הכתובת.");
 });
 
 app.get('/watch', async (req, res) => {
@@ -12,29 +12,32 @@ app.get('/watch', async (req, res) => {
     if (!videoId) return res.status(400).send('Missing ID');
 
     const url = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log(`מנסה להזרים סרטון: ${videoId}`);
+    console.log(`--- מנסה להזרים: ${videoId} ---`);
 
     try {
-        // הגדרות מתקדמות כדי "לעבוד" על יוטיוב
-        const options = {
-            filter: 'audioandvideo',
-            quality: 'highest',
-            requestOptions: {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                }
-            }
-        };
-
+        // בדיקה אם הסרטון קיים לפני שמתחילים להזרים
+        const info = await ytdl.getInfo(url);
+        
         res.header('Content-Type', 'video/mp4');
-        ytdl(url, options).pipe(res);
+        
+        // הזרמה עם הגדרות אבטחה
+        const stream = ytdl.downloadFromInfo(info, {
+            filter: 'audioandvideo',
+            quality: 'highest'
+        });
+
+        stream.pipe(res);
+
+        stream.on('error', (err) => {
+            console.error("שגיאה בזמן ההזרמה:", err.message);
+            if (!res.headersSent) res.status(500).send("ההזרמה נפסקה.");
+        });
 
     } catch (e) {
-        console.error("שגיאה קריטית:", e.message);
-        res.status(500).send('השרת נתקל בקושי מול יוטיוב: ' + e.message);
+        console.error("שגיאה בשליפת המידע:", e.message);
+        // אם יוטיוב חוסם, נראה את זה כאן
+        res.status(500).send(`שגיאה מיוטיוב: ${e.message}`);
     }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
