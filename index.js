@@ -1,9 +1,10 @@
 const express = require('express');
-const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
+const https = require('https');
+const http = require('http');
 
 dotenv.config();
 
@@ -19,7 +20,6 @@ const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || "1//04hXXDkwmzKAcCgYIAR
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, "https://developers.google.com/oauthplayground");
 oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
-
 const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
 app.get('/', (req, res) => {
@@ -27,79 +27,88 @@ app.get('/', (req, res) => {
 });
 
 async function uploadToDrive(filePath, fileName) {
-    const fileMetadata = {
-        name: fileName,
-        // We can upload to the root of the user's drive if no folderId is specified
-    };
-    
-    const media = {
-        mimeType: 'video/mp4',
-        body: fs.createReadStream(filePath)
-    };
-
-    console.log(`Uploading ${fileName} to Google Drive...`);
-    
-    const res = await drive.files.create({
-        resource: fileMetadata,
-        media: media,
-        fields: 'id, name, webViewLink'
-    });
-    
+    const fileMetadata = { name: fileName };
+    const media = { mimeType: 'video/mp4', body: fs.createReadStream(filePath) };
+    const res = await drive.files.create({ resource: fileMetadata, media: media, fields: 'id, name, webViewLink' });
     return res.data;
+}
+
+function downloadFile(url, dest) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest);
+        const client = url.startsWith('https') ? https : http;
+        client.get(url, (response) => {
+            if (response.statusCode === 301 || response.statusCode === 302) {
+                return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+            }
+            if (response.statusCode !== 200) return reject(new Error(`Failed to get '${url}' (${response.statusCode})`));
+            response.pipe(file);
+            file.on('finish', () => { file.close(); resolve(); });
+        }).on('error', (err) => {
+            fs.unlink(dest, () => {});
+            reject(err);
+        });
+    });
 }
 
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     if (!videoId) return res.status(400).send('Missing video ID');
 
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
     const outputFilename = `${videoId}.mp4`;
     const outputPath = path.join(__dirname, outputFilename);
 
-    console.log(`Starting download for: ${videoId}`);
-    
     try {
-        res.write(`Starting background download for video ${videoId}...\n`);
+        res.write(`Starting background download via Piped API for video ${videoId}...\n`);
         
-        const cookiesPath = path.join(__dirname, 'cookies.txt');
-        if (!fs.existsSync(cookiesPath)) {
-            throw new Error("Cookies file not found on the server! Cannot bypass bot protection.");
+        // Use Piped API to get stream URL bypassing YouTube bot checks
+        const pipedUrl = `https://pipedapi.kavin.rocks/streams/${videoId}`;
+        const pipedResponse = await fetch(pipedUrl);
+        if (!pipedResponse.ok) {
+            throw new Error(`Piped API failed: ${pipedResponse.status} ${pipedResponse.statusText}`);
         }
-
-        // 1. Download Video using yt-dlp
-        await youtubedl(url, {
-            cookies: cookiesPath,   // Absolute path to cookies file
-            extractorArgs: 'youtube:player_client=android', // Bypass bot block on data centers
-            format: 'b',            // Suppress "best" warning
-            jsRuntimes: 'node',     // Fix missing JS runtime warning
-            output: outputPath,
-            noCheckCertificates: true
-        });
         
-        console.log(`Download finished locally: ${outputPath}`);
+        const data = await pipedResponse.json();
+        
+        // Find a combined video+audio stream (typically 720p or 360p mp4)
+        let streamUrl = null;
+        if (data.videoStreams && data.videoStreams.length > 0) {
+            const combinedStreams = data.videoStreams.filter(s => s.videoOnly === false && s.mimeType === "video/mp4");
+            if (combinedStreams.length > 0) {
+                // Get highest quality combined stream
+                streamUrl = combinedStreams[0].url;
+            } else {
+                // Fallback to the first available stream if no combined stream is found
+                streamUrl = data.videoStreams[0].url;
+            }
+        }
+        
+        if (!streamUrl) {
+            throw new Error(`Piped did not return a valid video stream URL.`);
+        }
+        
+        res.write(`Got direct URL from Piped! Downloading to server...\n`);
+        
+        // Download from the direct URL
+        await downloadFile(streamUrl, outputPath);
+        
         res.write(`Download finished on server. Starting upload to Google Drive...\n`);
 
-        // 2. Upload to Google Drive
+        // Upload to Google Drive
         const driveResponse = await uploadToDrive(outputPath, `YoutubeDownload_${videoId}.mp4`);
-        console.log("Upload successful!", driveResponse);
         
         res.write(`\nSuccess! File uploaded to Google Drive.\nFile Link: ${driveResponse.webViewLink}\n`);
         res.end();
 
-        // 3. Cleanup local file
+        // Cleanup local file
         fs.unlinkSync(outputPath);
         
     } catch (error) {
         console.error("Error process:", error);
         res.write(`\nError occurred: ${error.message}\n`);
         res.end();
-        
-        if (fs.existsSync(outputPath)) {
-            fs.unlinkSync(outputPath);
-        }
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Cloud Downloader Server running on port ${PORT}`);
-});
+app.listen(PORT, () => { console.log(`Cloud Downloader Server running on port ${PORT}`); });
