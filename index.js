@@ -61,14 +61,37 @@ app.get('/download', async (req, res) => {
     try {
         res.write(`Starting background download via Piped API for video ${videoId}...\n`);
         
-        // Use Piped API to get stream URL bypassing YouTube bot checks
-        const pipedUrl = `https://pipedapi.kavin.rocks/streams/${videoId}`;
-        const pipedResponse = await fetch(pipedUrl);
-        if (!pipedResponse.ok) {
-            throw new Error(`Piped API failed: ${pipedResponse.status} ${pipedResponse.statusText}`);
+        const pipedInstances = [
+            "pipedapi.kavin.rocks",
+            "pipedapi.tokhmi.xyz",
+            "api.piped.projectsegfau.lt",
+            "pipedapi.moomoo.me",
+            "piped-api.garudalinux.org",
+            "pipedapi.lunar.icu"
+        ];
+        
+        let data = null;
+        let lastError = "";
+
+        for (const instance of pipedInstances) {
+            try {
+                const pipedUrl = `https://${instance}/streams/${videoId}`;
+                console.log(`Trying Piped instance: ${instance}`);
+                const pipedResponse = await fetch(pipedUrl);
+                if (pipedResponse.ok) {
+                    data = await pipedResponse.json();
+                    break;
+                } else {
+                    lastError = `${pipedResponse.status} ${pipedResponse.statusText}`;
+                }
+            } catch (err) {
+                lastError = err.message;
+            }
         }
         
-        const data = await pipedResponse.json();
+        if (!data) {
+            throw new Error(`All Piped API instances failed. Last error: ${lastError}`);
+        }
         
         // Find a combined video+audio stream (typically 720p or 360p mp4)
         let streamUrl = null;
