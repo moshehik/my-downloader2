@@ -71,7 +71,7 @@ app.get('/download', async (req, res) => {
         ];
         
         let data = null;
-        let lastError = "";
+        let errors = [];
 
         for (const instance of pipedInstances) {
             try {
@@ -87,15 +87,15 @@ app.get('/download', async (req, res) => {
                     data = await pipedResponse.json();
                     break;
                 } else {
-                    lastError = `${pipedResponse.status} ${pipedResponse.statusText}`;
+                    errors.push(`${instance}: ${pipedResponse.status} ${pipedResponse.statusText}`);
                 }
             } catch (err) {
-                lastError = err.message;
+                errors.push(`${instance}: ${err.message}`);
             }
         }
         
         if (!data) {
-            throw new Error(`All Piped API instances failed. Last error: ${lastError}`);
+            throw new Error(`All Piped API instances failed.\nErrors:\n${errors.join('\n')}`);
         }
         
         // Find a combined video+audio stream (typically 720p or 360p mp4)
