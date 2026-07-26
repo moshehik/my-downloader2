@@ -1,9 +1,10 @@
 const express = require('express');
-const youtubedl = require('youtube-dl-exec');
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
+const https = require('https');
+const http = require('http');
 
 dotenv.config();
 
@@ -27,25 +28,42 @@ app.get('/', (req, res) => {
 });
 
 async function uploadToDrive(filePath, fileName) {
-    const fileMetadata = {
-        name: fileName,
-        // We can upload to the root of the user's drive if no folderId is specified
-    };
-    
+    const fileMetadata = { name: fileName };
     const media = {
         mimeType: 'video/mp4',
         body: fs.createReadStream(filePath)
     };
-
-    console.log(`Uploading ${fileName} to Google Drive...`);
-    
     const res = await drive.files.create({
         resource: fileMetadata,
         media: media,
         fields: 'id, name, webViewLink'
     });
-    
     return res.data;
+}
+
+// Function to download file from a URL to local disk
+function downloadFile(url, dest) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest);
+        const client = url.startsWith('https') ? https : http;
+        
+        client.get(url, (response) => {
+            if (response.statusCode === 301 || response.statusCode === 302) {
+                return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+            }
+            if (response.statusCode !== 200) {
+                return reject(new Error(`Failed to get '${url}' (${response.statusCode})`));
+            }
+            response.pipe(file);
+            file.on('finish', () => {
+                file.close();
+                resolve();
+            });
+        }).on('error', (err) => {
+            fs.unlink(dest, () => {});
+            reject(err);
+        });
+    });
 }
 
 app.get('/download', async (req, res) => {
@@ -56,47 +74,60 @@ app.get('/download', async (req, res) => {
     const outputFilename = `${videoId}.mp4`;
     const outputPath = path.join(__dirname, outputFilename);
 
-    console.log(`Starting download for: ${videoId}`);
+    console.log(`Starting Cobalt API download for: ${videoId}`);
     
     try {
-        res.write(`Starting background download for video ${videoId}...\n`);
+        res.write(`Starting background download via Cobalt API for video ${videoId}...\n`);
         
-        const cookiesPath = path.join(__dirname, 'cookies.txt');
-        if (!fs.existsSync(cookiesPath)) {
-            throw new Error("Cookies file not found on the server! Cannot bypass bot protection.");
+        // 1. Get Direct URL from Cobalt API
+        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+            },
+            body: JSON.stringify({
+                url: url,
+                vCodec: "h264",
+                vQuality: "1080",
+                aFormat: "best",
+                isAudioOnly: false
+            })
+        });
+
+        if (!cobaltResponse.ok) {
+            throw new Error(`Cobalt API failed: ${cobaltResponse.status} ${cobaltResponse.statusText}`);
         }
 
-        // 1. Download Video using yt-dlp
-        await youtubedl(url, {
-            cookies: cookiesPath,   // Absolute path to cookies file
-            extractorArgs: 'youtube:player_client=android', // Bypass bot block on data centers
-            format: 'b',            // Suppress "best" warning
-            jsRuntimes: 'node',     // Fix missing JS runtime warning
-            output: outputPath,
-            noCheckCertificates: true
-        });
+        const data = await cobaltResponse.json();
+        if (!data.url) {
+            throw new Error(`Cobalt did not return a URL. Response: ${JSON.stringify(data)}`);
+        }
+        
+        res.write(`Got direct URL from Cobalt! Downloading to server...\n`);
+        
+        // 2. Download from the direct URL
+        await downloadFile(data.url, outputPath);
         
         console.log(`Download finished locally: ${outputPath}`);
         res.write(`Download finished on server. Starting upload to Google Drive...\n`);
 
-        // 2. Upload to Google Drive
+        // 3. Upload to Google Drive
         const driveResponse = await uploadToDrive(outputPath, `YoutubeDownload_${videoId}.mp4`);
         console.log("Upload successful!", driveResponse);
         
         res.write(`\nSuccess! File uploaded to Google Drive.\nFile Link: ${driveResponse.webViewLink}\n`);
         res.end();
 
-        // 3. Cleanup local file
+        // 4. Cleanup local file
         fs.unlinkSync(outputPath);
         
     } catch (error) {
         console.error("Error process:", error);
         res.write(`\nError occurred: ${error.message}\n`);
         res.end();
-        
-        if (fs.existsSync(outputPath)) {
-            fs.unlinkSync(outputPath);
-        }
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
 });
 
