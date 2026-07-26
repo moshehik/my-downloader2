@@ -86,6 +86,7 @@ const youtubedl = require('youtube-dl-exec');
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     const type = req.query.type || 'video'; // 'video' or 'audio'
+    const wantZip = req.query.zip === 'true';
     
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
@@ -110,8 +111,38 @@ app.get('/download', async (req, res) => {
         
         await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
         
-        const fileUrl = `https://my-downloader2.onrender.com/files/${outputFilename}`;
-        res.json({ success: true, url: fileUrl, type: type });
+        let finalFilename = outputFilename;
+        
+        if (wantZip) {
+            finalFilename = `${videoId}.zip`;
+            const zipPath = path.join(__dirname, finalFilename);
+            
+            const archiver = require('archiver');
+            const archiverZipEncrypted = require('archiver-zip-encrypted');
+            archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
+            
+            await new Promise((resolve, reject) => {
+                const output = fs.createWriteStream(zipPath);
+                const archive = archiver('zip-encrypted', {
+                    zlib: { level: 8 },
+                    encryptionMethod: 'aes256',
+                    password: '1234'
+                });
+                
+                output.on('close', resolve);
+                archive.on('error', reject);
+                
+                archive.pipe(output);
+                archive.file(outputPath, { name: outputFilename });
+                archive.finalize();
+            });
+            
+            // Delete the original raw file after zipping
+            fs.unlink(outputPath, () => {});
+        }
+        
+        const fileUrl = `https://my-downloader2.onrender.com/files/${finalFilename}`;
+        res.json({ success: true, url: fileUrl, type: type, zipped: wantZip });
     } catch (error) {
         console.error("Error process:", error);
         res.status(500).json({ success: false, error: error.message });

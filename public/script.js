@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const url = urlInput.value.trim();
         const format = document.querySelector('input[name="format"]:checked').value;
+        const zipOption = document.getElementById('zipOption').checked;
         const videoId = extractVideoId(url);
 
         if (!videoId) {
@@ -46,7 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Fetch from backend
-            const response = await fetch(`/download?id=${encodeURIComponent(videoId)}&type=${encodeURIComponent(format)}`);
+            let reqUrl = `/download?id=${encodeURIComponent(videoId)}&type=${encodeURIComponent(format)}`;
+            if (zipOption) reqUrl += '&zip=true';
+            
+            const response = await fetch(reqUrl);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
