@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoId = extractVideoId(url);
 
         if (!videoId) {
-            showError('Invalid YouTube URL');
+            showError('קישור ליוטיוב לא תקין');
             return;
         }
 
@@ -58,10 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 showSuccess(data.url, format);
                 saveToHistory(url, data.url, format);
             } else {
-                showError(data.error || 'Failed to generate download link');
+                showError(data.error || 'נכשל בניסיון לייצר קישור להורדה');
             }
         } catch (error) {
-            showError('Network error or backend is unreachable.');
+            showError('שגיאת רשת, או שהשרת לא זמין.');
             console.error('Download error:', error);
         } finally {
             // Reset loading state
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
         historyList.innerHTML = '';
         
         if (history.length === 0) {
-            historyList.innerHTML = '<li style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">No recent downloads</li>';
+            historyList.innerHTML = '<li style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">אין הורדות אחרונות</li>';
             return;
         }
 
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 <div class="history-action">
-                    <a href="${item.downloadUrl}" title="Download again" download><i class="fa-solid fa-download"></i></a>
+                    <a href="${item.downloadUrl}" title="הורד שוב" download><i class="fa-solid fa-download"></i></a>
                 </div>
             `;
             historyList.appendChild(li);
