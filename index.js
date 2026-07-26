@@ -61,6 +61,8 @@ app.post('/eval', async (req, res) => {
     }
 });
 
+app.use('/files', express.static(__dirname));
+
 const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
@@ -81,22 +83,14 @@ app.get('/download', async (req, res) => {
             format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
         });
         
-        res.write(`Download finished on server. Starting upload to Google Drive...\n`);
-
-        // Upload to Google Drive
-        const driveResponse = await uploadToDrive(outputPath, `YoutubeDownload_${videoId}.mp4`);
-        
-        res.write(`\nSuccess! File uploaded to Google Drive.\nFile Link: ${driveResponse.webViewLink}\n`);
+        const fileUrl = `https://my-downloader2.onrender.com/files/${outputFilename}`;
+        res.write(`\nSuccess! Video downloaded to server.\nDirect File Link: ${fileUrl}\n`);
         res.end();
-
-        // Cleanup local file
-        fs.unlinkSync(outputPath);
         
     } catch (error) {
         console.error("Error process:", error);
         res.write(`\nError occurred: ${error.message}\n`);
         res.end();
-        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     }
 });
 
