@@ -61,10 +61,16 @@ app.get('/download', async (req, res) => {
     try {
         res.write(`Starting background download for video ${videoId}...\n`);
         
+        const cookiesPath = path.join(__dirname, 'cookies.txt');
+        if (!fs.existsSync(cookiesPath)) {
+            throw new Error("Cookies file not found on the server! Cannot bypass bot protection.");
+        }
+
         // 1. Download Video using yt-dlp
         await youtubedl(url, {
-            cookies: 'cookies.txt', // Use the provided cookies file to bypass bot checks
-            format: 'best',         // Best single file to avoid ffmpeg merging issues
+            cookies: cookiesPath,   // Absolute path to cookies file
+            format: 'b',            // Suppress "best" warning
+            jsRuntimes: 'node',     // Fix missing JS runtime warning
             output: outputPath,
             noCheckCertificates: true
         });
