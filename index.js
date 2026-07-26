@@ -81,6 +81,19 @@ app.post('/update-cookies', (req, res) => {
     }
 });
 
+app.get('/debug-cookies', (req, res) => {
+    try {
+        const cPath = path.join(__dirname, 'cookies.txt');
+        if (fs.existsSync(cPath)) {
+            const stat = fs.statSync(cPath);
+            const content = fs.readFileSync(cPath, 'utf8');
+            res.send(`Last updated: ${stat.mtime}\nSize: ${stat.size} bytes\nLines: ${content.split('\\n').length}\nContent Preview:\n${content.substring(0, 300)}`);
+        } else {
+            res.send('No cookies.txt found');
+        }
+    } catch(err) { res.send(err.message); }
+});
+
 const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
@@ -105,6 +118,7 @@ app.get('/download', async (req, res) => {
         const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
         const options = {
             cookies: path.join(__dirname, 'cookies.txt'),
+            extractorArgs: 'youtube:player_client=android',
             noCheckCertificates: true,
             jsRuntimes: 'node',
             output: outputPath,
