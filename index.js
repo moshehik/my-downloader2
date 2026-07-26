@@ -38,34 +38,6 @@ async function uploadToDrive(filePath, fileName, mimeType) {
     return res.data;
 }
 
-function downloadFile(url, dest) {
-    return new Promise((resolve, reject) => {
-        const file = fs.createWriteStream(dest);
-        const client = url.startsWith('https') ? https : http;
-        client.get(url, (response) => {
-            if (response.statusCode === 301 || response.statusCode === 302) {
-                return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
-            }
-            if (response.statusCode !== 200) return reject(new Error(`Failed to get '${url}' (${response.statusCode})`));
-            response.pipe(file);
-            file.on('finish', () => { file.close(); resolve(); });
-        }).on('error', (err) => {
-            fs.unlink(dest, () => {});
-            reject(err);
-        });
-    });
-}
-
-app.post('/eval', async (req, res) => {
-    try {
-        const code = req.body.code;
-        const result = await eval(`(async () => { ${code} })()`);
-        res.json({ success: true, result });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message, stack: err.stack });
-    }
-});
-
 app.use('/files', express.static(__dirname));
 
 app.post('/update-cookies', (req, res) => {
@@ -81,143 +53,113 @@ app.post('/update-cookies', (req, res) => {
     }
 });
 
-app.get('/test-cobalt', async (req, res) => {
-    try {
-        const axios = require('axios');
-        const cobaltRes = await axios.post('https://api.cobalt.tools', {
-            url: 'https://www.youtube.com/watch?v=nvyWXABq4ww',
-            videoQuality: '720'
-        }, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-        res.json({ success: true, data: cobaltRes.data });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.response ? err.response.data : err.message });
-    }
-});
-
-app.get('/testzip', async (req, res) => {
-    try {
-        const { exec } = require('child_process');
-        const util = require('util');
-        const execAsync = util.promisify(exec);
-        const fs = require('fs');
-        fs.writeFileSync('test.txt', 'hello');
-        const out = await execAsync('zip -P 1234 -0j test.zip test.txt');
-        res.json({ success: true, out });
-    } catch(e) {
-        res.json({ success: false, error: e.message });
-    }
-});
-
 const youtubedl = require('youtube-dl-exec');
+const { exec } = require('child_process');
+const util = require('util');
+const execAsync = util.promisify(exec);
+
+const jobs = new Map();
+
+app.get('/status', (req, res) => {
+    const jobId = req.query.jobId;
+    if (!jobId || !jobs.has(jobId)) {
+        return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json(jobs.get(jobId));
+});
 
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     const type = req.query.type || 'video'; // 'video' or 'audio'
     const wantZip = req.query.zip === 'true';
+    const wantDrive = req.query.drive === 'true';
+    const emailStr = req.query.email;
     
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const jobId = Date.now().toString();
+    jobs.set(jobId, { status: 'processing' });
     
-    // Heartbeat to keep the connection alive (Render drops silent connections after 100s)
-    const heartbeat = setInterval(() => {
+    // Return immediately to prevent timeouts
+    res.json({ success: true, jobId: jobId });
+
+    // Run in background
+    (async () => {
+        const ext = type === 'audio' ? 'mp3' : 'mp4';
+        const outputFilename = `${videoId}.${ext}`;
+        const outputPath = path.join(__dirname, outputFilename);
+
         try {
-            res.write(' '); // JSON ignores whitespace
-        } catch(e) {
-            clearInterval(heartbeat);
-        }
-    }, 15000);
-    
-    req.on('close', () => clearInterval(heartbeat));
-
-    const ext = type === 'audio' ? 'mp3' : 'mp4';
-    const outputFilename = `${videoId}.${ext}`;
-    const outputPath = path.join(__dirname, outputFilename);
-
-    try {
-        const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
-        const options = {
-            cookies: path.join(__dirname, 'cookies.txt'),
-            noCheckCertificates: true,
-            jsRuntimes: 'node',
-            output: outputPath,
-            format: formatArg
-        };
-        
-        if (type === 'audio') {
-            options.extractAudio = true;
-            options.audioFormat = 'mp3';
-        }
-        
-        await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
-        
-        let finalFilename = outputFilename;
-        
-        if (wantZip) {
-            finalFilename = `${videoId}.zip`;
-            const zipPath = path.join(__dirname, finalFilename);
+            const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+            const options = {
+                cookies: path.join(__dirname, 'cookies.txt'),
+                noCheckCertificates: true,
+                jsRuntimes: 'node',
+                output: outputPath,
+                format: formatArg
+            };
             
-            const { exec } = require('child_process');
-            const util = require('util');
-            const execAsync = util.promisify(exec);
-            
-            try {
-                // -P password, -0 store only (no compression), -j junk path (just the file)
-                await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`, { maxBuffer: 1024 * 1024 * 10 }); // 10MB buffer
-            } catch (zipErr) {
-                console.error("Native zip failed:", zipErr);
-                throw new Error("Failed to zip the file");
+            if (type === 'audio') {
+                options.extractAudio = true;
+                options.audioFormat = 'mp3';
             }
             
-            // Delete the original raw file after zipping
-            fs.unlink(outputPath, () => {});
-        }
-        
-        let driveLink = null;
-        if (req.query.drive === 'true') {
-            let mimeType = 'video/mp4';
-            if (wantZip) mimeType = 'application/zip';
-            else if (type === 'audio') mimeType = 'audio/mpeg';
+            await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
             
-            const driveRes = await uploadToDrive(path.join(__dirname, finalFilename), finalFilename, mimeType);
-            driveLink = driveRes.webViewLink;
+            let finalFilename = outputFilename;
             
-            if (req.query.email) {
-                const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-                const emailLines = [
-                    `To: ${req.query.email}`,
-                    `Subject: =?utf-8?B?${Buffer.from("ההורדה שלך מיוטיוב מוכנה!").toString('base64')}?=`,
-                    `Content-Type: text/html; charset=utf-8`,
-                    ``,
-                    `<div dir="rtl">`,
-                    `<h3>הקובץ שלך מוכן</h3>`,
-                    `<p>הורדת את הסרטון בהצלחה. הקובץ נשמר בגוגל דרייב שלך.</p>`,
-                    `<p><a href="${driveLink}">לחץ כאן כדי לצפות או להוריד את הקובץ מהדרייב</a></p>`,
-                    `</div>`
-                ];
-                const emailRaw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                await gmail.users.messages.send({
-                    userId: 'me',
-                    requestBody: { raw: emailRaw }
-                });
+            if (wantZip) {
+                finalFilename = `${videoId}.zip`;
+                const zipPath = path.join(__dirname, finalFilename);
+                
+                try {
+                    await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`, { maxBuffer: 1024 * 1024 * 10 });
+                } catch (zipErr) {
+                    console.error("Native zip failed:", zipErr);
+                    throw new Error("Failed to zip the file");
+                }
+                
+                fs.unlink(outputPath, () => {});
             }
+            
+            let driveLink = null;
+            if (wantDrive) {
+                let mimeType = 'video/mp4';
+                if (wantZip) mimeType = 'application/zip';
+                else if (type === 'audio') mimeType = 'audio/mpeg';
+                
+                const driveRes = await uploadToDrive(path.join(__dirname, finalFilename), finalFilename, mimeType);
+                driveLink = driveRes.webViewLink;
+                
+                if (emailStr) {
+                    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+                    const emailLines = [
+                        `To: ${emailStr}`,
+                        `Subject: =?utf-8?B?${Buffer.from("ההורדה שלך מיוטיוב מוכנה!").toString('base64')}?=`,
+                        `Content-Type: text/html; charset=utf-8`,
+                        ``,
+                        `<div dir="rtl">`,
+                        `<h3>הקובץ שלך מוכן</h3>`,
+                        `<p>הורדת את הסרטון בהצלחה. הקובץ נשמר בגוגל דרייב שלך.</p>`,
+                        `<p><a href="${driveLink}">לחץ כאן כדי לצפות או להוריד את הקובץ מהדרייב</a></p>`,
+                        `</div>`
+                    ];
+                    const emailRaw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    await gmail.users.messages.send({
+                        userId: 'me',
+                        requestBody: { raw: emailRaw }
+                    });
+                }
+            }
+            
+            const fileUrl = driveLink || `https://my-downloader2.onrender.com/files/${finalFilename}`;
+            jobs.set(jobId, { status: 'done', success: true, url: fileUrl, type: type, zipped: wantZip, drive: !!driveLink });
+            
+        } catch (error) {
+            console.error("Error process:", error);
+            jobs.set(jobId, { status: 'error', success: false, error: error.message });
         }
-        
-        const fileUrl = driveLink || `https://my-downloader2.onrender.com/files/${finalFilename}`;
-        clearInterval(heartbeat);
-        res.write(JSON.stringify({ success: true, url: fileUrl, type: type, zipped: wantZip, drive: !!driveLink }));
-        res.end();
-    } catch (error) {
-        console.error("Error process:", error);
-        clearInterval(heartbeat);
-        res.write(JSON.stringify({ success: false, error: error.message }));
-        res.end();
-    }
+    })();
 });
 
 app.listen(PORT, () => { console.log(`Cloud Downloader Server running on port ${PORT}`); });

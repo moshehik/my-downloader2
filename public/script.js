@@ -82,23 +82,57 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const data = await response.json();
 
-            if (data.success && data.url) {
+            if (data.jobId) {
+                pollJob(data.jobId, url, format);
+            } else if (data.success && data.url) {
+                // Fallback for immediate response
                 showSuccess(data.url, format);
                 saveToHistory(url, data.url, format);
+                resetLoadingState();
             } else {
                 showError(data.error || 'נכשל בניסיון לייצר קישור להורדה');
+                resetLoadingState();
             }
         } catch (error) {
             showError('שגיאת רשת, או שהשרת לא זמין.');
             console.error('Download error:', error);
-        } finally {
-            // Reset loading state
-            submitBtn.classList.remove('loading');
-            submitBtn.disabled = false;
-            btnText.style.display = 'inline-block';
-            loader.style.display = 'none';
+            resetLoadingState();
         }
     });
+
+    async function pollJob(jobId, originalUrl, format) {
+        try {
+            const res = await fetch(`/status?jobId=${jobId}`);
+            if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+            const data = await res.json();
+            
+            if (data.status === 'processing') {
+                // Update loading text to show progress if needed, but for now just wait
+                setTimeout(() => pollJob(jobId, originalUrl, format), 3000); // Check every 3 seconds
+            } else if (data.status === 'done' && data.success) {
+                showSuccess(data.url, format);
+                saveToHistory(originalUrl, data.url, format);
+                resetLoadingState();
+            } else if (data.status === 'error') {
+                showError(data.error || 'שגיאה בעיבוד הבקשה');
+                resetLoadingState();
+            } else {
+                showError('סטטוס לא ברור מהשרת');
+                resetLoadingState();
+            }
+        } catch (error) {
+            showError('שגיאה בבדיקת סטטוס.');
+            console.error('Polling error:', error);
+            resetLoadingState();
+        }
+    }
+
+    function resetLoadingState() {
+        submitBtn.classList.remove('loading');
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline-block';
+        loader.style.display = 'none';
+    }
 
     function showSuccess(url, type) {
         resultArea.classList.remove('hidden');
