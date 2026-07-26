@@ -117,7 +117,6 @@ app.get('/download', async (req, res) => {
     try {
         const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
         const options = {
-            cookies: path.join(__dirname, 'cookies.txt'),
             extractorArgs: 'youtube:player_client=android',
             noCheckCertificates: true,
             jsRuntimes: 'node',
