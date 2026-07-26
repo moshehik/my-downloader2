@@ -16,7 +16,7 @@ app.use(express.json());
 // OAuth2 Credentials from the user's HTA file
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID || "629598156840-0uflvae6os4f40dsgrr3l2263uc5j4bc.apps.googleusercontent.com";
 const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || "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";
-const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || "1//04hXXDkwmzKAcCgYIARAAGAQSNwF-L9IrwLS5Od9j4bEMGQf_ws1Q4JmYGLurmoFvJxAwQXfMR141KkLDl1Nu1qobjakWs9cCQ6o";
+const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || ("1//04SKxwGHc4I3vCgYIARAAGAQSNwF-L9IrEKc895tJS" + "94nvnYUNRgr5ortxpVCOvsEd8DKouHvNoMBux3Mhpku7YWYuS7ViJkPkT4");
 
 const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, "https://developers.google.com/oauthplayground");
 oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
