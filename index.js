@@ -86,12 +86,12 @@ app.get('/status', (req, res) => {
     res.json(jobs.get(jobId));
 });
 
-app.get('/download', async (req, res) => {
-    const videoId = req.query.id;
-    const type = req.query.type || 'video'; // 'video' or 'audio'
-    const wantZip = req.query.zip === 'true';
-    const wantDrive = req.query.drive === 'true';
-    const emailStr = req.query.email;
+app.post('/download', async (req, res) => {
+    const videoId = req.body.id;
+    const type = req.body.type || 'video'; // 'video' or 'audio'
+    const wantZip = req.body.zip === true || req.body.zip === 'true';
+    const wantDrive = req.body.drive === true || req.body.drive === 'true';
+    const emailStr = req.body.email;
     
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
