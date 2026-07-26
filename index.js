@@ -31,9 +31,9 @@ app.get('/', (req, res) => {
     res.send("שרת הענן פועל! הוסף /download?id=VIDEO_ID כדי להוריד סרטון ולשמור אותו ישירות לדרייב.");
 });
 
-async function uploadToDrive(filePath, fileName) {
+async function uploadToDrive(filePath, fileName, mimeType) {
     const fileMetadata = { name: fileName };
-    const media = { mimeType: 'video/mp4', body: fs.createReadStream(filePath) };
+    const media = { mimeType: mimeType || 'application/octet-stream', body: fs.createReadStream(filePath) };
     const res = await drive.files.create({ resource: fileMetadata, media: media, fields: 'id, name, webViewLink' });
     return res.data;
 }
@@ -158,9 +158,39 @@ app.get('/download', async (req, res) => {
             fs.unlink(outputPath, () => {});
         }
         
-        const fileUrl = `https://my-downloader2.onrender.com/files/${finalFilename}`;
+        let driveLink = null;
+        if (req.query.drive === 'true') {
+            let mimeType = 'video/mp4';
+            if (wantZip) mimeType = 'application/zip';
+            else if (type === 'audio') mimeType = 'audio/mpeg';
+            
+            const driveRes = await uploadToDrive(path.join(__dirname, finalFilename), finalFilename, mimeType);
+            driveLink = driveRes.webViewLink;
+            
+            if (req.query.email) {
+                const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+                const emailLines = [
+                    `To: ${req.query.email}`,
+                    `Subject: =?utf-8?B?${Buffer.from("ההורדה שלך מיוטיוב מוכנה!").toString('base64')}?=`,
+                    `Content-Type: text/html; charset=utf-8`,
+                    ``,
+                    `<div dir="rtl">`,
+                    `<h3>הקובץ שלך מוכן</h3>`,
+                    `<p>הורדת את הסרטון בהצלחה. הקובץ נשמר בגוגל דרייב שלך.</p>`,
+                    `<p><a href="${driveLink}">לחץ כאן כדי לצפות או להוריד את הקובץ מהדרייב</a></p>`,
+                    `</div>`
+                ];
+                const emailRaw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                await gmail.users.messages.send({
+                    userId: 'me',
+                    requestBody: { raw: emailRaw }
+                });
+            }
+        }
+        
+        const fileUrl = driveLink || `https://my-downloader2.onrender.com/files/${finalFilename}`;
         clearInterval(heartbeat);
-        res.write(JSON.stringify({ success: true, url: fileUrl, type: type, zipped: wantZip }));
+        res.write(JSON.stringify({ success: true, url: fileUrl, type: type, zipped: wantZip, drive: !!driveLink }));
         res.end();
     } catch (error) {
         console.error("Error process:", error);

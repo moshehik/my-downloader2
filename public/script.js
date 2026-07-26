@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
     const thumbnailPreview = document.getElementById('thumbnailPreview');
     const thumbnailImg = document.getElementById('thumbnailImg');
+    const driveOption = document.getElementById('driveOption');
+    const emailContainer = document.getElementById('emailContainer');
+    const emailInput = document.getElementById('emailInput');
+
+    driveOption.addEventListener('change', () => {
+        emailContainer.style.display = driveOption.checked ? 'block' : 'none';
+    });
 
     // Load history on startup
     loadHistory();
@@ -40,6 +47,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
         const format = document.querySelector('input[name="format"]:checked').value;
         const zipOption = document.getElementById('zipOption').checked;
+        const driveOption = document.getElementById('driveOption').checked;
+        const emailVal = document.getElementById('emailInput').value.trim();
         const videoId = extractVideoId(url);
 
         if (!videoId) {
@@ -62,6 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Fetch from backend
             let reqUrl = `/download?id=${encodeURIComponent(videoId)}&type=${encodeURIComponent(format)}`;
             if (zipOption) reqUrl += '&zip=true';
+            if (driveOption) reqUrl += '&drive=true';
+            if (driveOption && emailVal) reqUrl += `&email=${encodeURIComponent(emailVal)}`;
             
             const response = await fetch(reqUrl);
             
