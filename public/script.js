@@ -114,8 +114,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             const data = await res.json();
             
+            if (data.logs && data.logs.length > 0) {
+                btnText.textContent = data.logs[data.logs.length - 1];
+                btnText.style.display = 'inline-block';
+            }
+            
             if (data.status === 'processing') {
-                // Update loading text to show progress if needed, but for now just wait
                 setTimeout(() => pollJob(jobId, originalUrl, format), 3000); // Check every 3 seconds
             } else if (data.status === 'done' && data.success) {
                 showSuccess(data.url, format);
@@ -138,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetLoadingState() {
         submitBtn.classList.remove('loading');
         submitBtn.disabled = false;
+        btnText.textContent = 'הורד סרטון';
         btnText.style.display = 'inline-block';
         loader.style.display = 'none';
     }

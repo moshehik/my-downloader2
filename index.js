@@ -96,8 +96,16 @@ app.post('/download', async (req, res) => {
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
     const jobId = Date.now().toString();
-    jobs.set(jobId, { status: 'processing' });
+    jobs.set(jobId, { status: 'processing', logs: ['בקשה התקבלה בשרת. מתחיל עיבוד...'] });
     
+    const log = (msg) => {
+        console.log(`[Job ${jobId}] ${msg}`);
+        const job = jobs.get(jobId);
+        if (job) {
+            job.logs.push(msg);
+        }
+    };
+
     // Return immediately to prevent timeouts
     res.json({ success: true, jobId: jobId });
 
@@ -108,6 +116,7 @@ app.post('/download', async (req, res) => {
         const outputPath = path.join(__dirname, outputFilename);
 
         try {
+            log('מתחיל הורדה מיוטיוב...');
             const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
             const options = {
                 cookies: path.join(__dirname, 'cookies.txt'),
@@ -123,10 +132,12 @@ app.post('/download', async (req, res) => {
             }
             
             await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
+            log('ההורדה מיוטיוב הסתיימה בהצלחה.');
             
             let finalFilename = outputFilename;
             
             if (wantZip) {
+                log('אורז את הקובץ ל-ZIP, אנא המתן (זה עשוי לקחת קצת זמן)...');
                 finalFilename = `${videoId}.zip`;
                 const zipPath = path.join(__dirname, finalFilename);
                 
@@ -134,22 +145,27 @@ app.post('/download', async (req, res) => {
                     await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`, { maxBuffer: 1024 * 1024 * 10 });
                 } catch (zipErr) {
                     console.error("Native zip failed:", zipErr);
+                    log('שגיאה באריזת ZIP!');
                     throw new Error("Failed to zip the file");
                 }
                 
                 fs.unlink(outputPath, () => {});
+                log('אריזת ה-ZIP הסתיימה בהצלחה.');
             }
             
             let driveLink = null;
             if (wantDrive) {
+                log('מעלה לגוגל דרייב...');
                 let mimeType = 'video/mp4';
                 if (wantZip) mimeType = 'application/zip';
                 else if (type === 'audio') mimeType = 'audio/mpeg';
                 
                 const driveRes = await uploadToDrive(path.join(__dirname, finalFilename), finalFilename, mimeType);
                 driveLink = driveRes.webViewLink;
+                log('ההעלאה לדרייב הסתיימה בהצלחה!');
                 
                 if (emailStr) {
+                    log(`שולח אימייל לכתובת: ${emailStr}...`);
                     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
                     const emailLines = [
                         `To: ${emailStr}`,
@@ -167,15 +183,18 @@ app.post('/download', async (req, res) => {
                         userId: 'me',
                         requestBody: { raw: emailRaw }
                     });
+                    log('אימייל נשלח בהצלחה!');
                 }
             }
             
             const fileUrl = driveLink || `https://my-downloader2.onrender.com/files/${finalFilename}`;
-            jobs.set(jobId, { status: 'done', success: true, url: fileUrl, type: type, zipped: wantZip, drive: !!driveLink });
+            jobs.set(jobId, { status: 'done', success: true, url: fileUrl, type: type, zipped: wantZip, drive: !!driveLink, logs: jobs.get(jobId).logs });
+            log('המשימה הסתיימה לחלוטין!');
             
         } catch (error) {
             console.error("Error process:", error);
-            jobs.set(jobId, { status: 'error', success: false, error: error.message });
+            log(`שגיאה: ${error.message}`);
+            jobs.set(jobId, { status: 'error', success: false, error: error.message, logs: jobs.get(jobId).logs });
         }
     })();
 });
