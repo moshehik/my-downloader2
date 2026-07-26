@@ -13,6 +13,24 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Catch crashes
+process.on('uncaughtException', (err) => {
+    fs.appendFileSync('crash.log', `[${new Date().toISOString()}] Uncaught Exception: ${err.message}\n${err.stack}\n\n`);
+    process.exit(1);
+});
+process.on('unhandledRejection', (reason, promise) => {
+    fs.appendFileSync('crash.log', `[${new Date().toISOString()}] Unhandled Rejection: ${reason}\n\n`);
+    process.exit(1);
+});
+
+app.get('/crashlogs', (req, res) => {
+    if (fs.existsSync('crash.log')) {
+        res.send(fs.readFileSync('crash.log', 'utf8'));
+    } else {
+        res.send("No crash logs found.");
+    }
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
