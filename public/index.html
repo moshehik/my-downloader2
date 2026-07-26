@@ -30,6 +30,10 @@
                     <input type="text" id="urlInput" placeholder="הדבק כאן קישור ליוטיוב..." required autocomplete="off">
                 </div>
                 
+                <div id="thumbnailPreview" style="display: none; margin-bottom: 1.5rem; text-align: center;">
+                    <img id="thumbnailImg" src="" alt="תצוגה מקדימה" style="max-width: 100%; max-height: 200px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); object-fit: cover;">
+                </div>
+                
                 <div class="format-toggle">
                     <input type="radio" id="formatVideo" name="format" value="video" checked>
                     <label for="formatVideo" class="toggle-btn"><i class="fa-solid fa-video"></i> וידאו (MP4)</label>

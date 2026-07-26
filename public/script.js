@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadLink = document.getElementById('downloadLink');
     const historyList = document.getElementById('historyList');
     const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    const thumbnailPreview = document.getElementById('thumbnailPreview');
+    const thumbnailImg = document.getElementById('thumbnailImg');
 
     // Load history on startup
     loadHistory();
@@ -20,6 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const match = url.match(regex);
         return match ? match[1] : null;
     }
+
+    urlInput.addEventListener('input', () => {
+        const url = urlInput.value.trim();
+        const videoId = extractVideoId(url);
+        if (videoId) {
+            thumbnailImg.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            thumbnailPreview.style.display = 'block';
+        } else {
+            thumbnailPreview.style.display = 'none';
+        }
+    });
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
