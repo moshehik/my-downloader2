@@ -90,6 +90,13 @@ app.get('/download', async (req, res) => {
     
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    
+    // Heartbeat to keep the connection alive (Render drops silent connections after 100s)
+    const heartbeat = setInterval(() => {
+        res.write(' '); // JSON ignores whitespace
+    }, 15000);
+
     const ext = type === 'audio' ? 'mp3' : 'mp4';
     const outputFilename = `${videoId}.${ext}`;
     const outputPath = path.join(__dirname, outputFilename);
@@ -124,7 +131,7 @@ app.get('/download', async (req, res) => {
             await new Promise((resolve, reject) => {
                 const output = fs.createWriteStream(zipPath);
                 const archive = archiver('zip-encrypted', {
-                    zlib: { level: 8 },
+                    zlib: { level: 0 }, // Store only, video is already compressed. Avoids OOM!
                     encryptionMethod: 'aes256',
                     password: '1234'
                 });
@@ -142,10 +149,14 @@ app.get('/download', async (req, res) => {
         }
         
         const fileUrl = `https://my-downloader2.onrender.com/files/${finalFilename}`;
-        res.json({ success: true, url: fileUrl, type: type, zipped: wantZip });
+        clearInterval(heartbeat);
+        res.write(JSON.stringify({ success: true, url: fileUrl, type: type, zipped: wantZip }));
+        res.end();
     } catch (error) {
         console.error("Error process:", error);
-        res.status(500).json({ success: false, error: error.message });
+        clearInterval(heartbeat);
+        res.write(JSON.stringify({ success: false, error: error.message }));
+        res.end();
     }
 });
 
