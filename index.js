@@ -142,25 +142,17 @@ app.get('/download', async (req, res) => {
             finalFilename = `${videoId}.zip`;
             const zipPath = path.join(__dirname, finalFilename);
             
-            const archiver = require('archiver');
-            const archiverZipEncrypted = require('archiver-zip-encrypted');
-            archiver.registerFormat('zip-encrypted', archiverZipEncrypted);
+            const { exec } = require('child_process');
+            const util = require('util');
+            const execAsync = util.promisify(exec);
             
-            await new Promise((resolve, reject) => {
-                const output = fs.createWriteStream(zipPath);
-                const archive = archiver('zip-encrypted', {
-                    zlib: { level: 0 }, // Store only, video is already compressed. Avoids OOM!
-                    encryptionMethod: 'aes256',
-                    password: '1234'
-                });
-                
-                output.on('close', resolve);
-                archive.on('error', reject);
-                
-                archive.pipe(output);
-                archive.file(outputPath, { name: outputFilename });
-                archive.finalize();
-            });
+            try {
+                // -P password, -0 store only (no compression), -j junk path (just the file)
+                await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`);
+            } catch (zipErr) {
+                console.error("Native zip failed:", zipErr);
+                throw new Error("Failed to zip the file");
+            }
             
             // Delete the original raw file after zipping
             fs.unlink(outputPath, () => {});
