@@ -61,6 +61,8 @@ app.post('/eval', async (req, res) => {
     }
 });
 
+const youtubedl = require('youtube-dl-exec');
+
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     if (!videoId) return res.status(400).send('Missing video ID');
@@ -69,66 +71,15 @@ app.get('/download', async (req, res) => {
     const outputPath = path.join(__dirname, outputFilename);
 
     try {
-        res.write(`Starting background download via Piped API for video ${videoId}...\n`);
+        res.write(`Starting background download via yt-dlp (with cookies bypass) for video ${videoId}...\n`);
         
-        const pipedInstances = [
-            "pipedapi.kavin.rocks",
-            "pipedapi.tokhmi.xyz",
-            "api.piped.projectsegfau.lt",
-            "pipedapi.moomoo.me",
-            "piped-api.garudalinux.org",
-            "pipedapi.lunar.icu"
-        ];
-        
-        let data = null;
-        let errors = [];
-
-        for (const instance of pipedInstances) {
-            try {
-                const pipedUrl = `https://${instance}/streams/${videoId}`;
-                console.log(`Trying Piped instance: ${instance}`);
-                const pipedResponse = await fetch(pipedUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'application/json'
-                    }
-                });
-                if (pipedResponse.ok) {
-                    data = await pipedResponse.json();
-                    break;
-                } else {
-                    errors.push(`${instance}: ${pipedResponse.status} ${pipedResponse.statusText}`);
-                }
-            } catch (err) {
-                errors.push(`${instance}: ${err.message}`);
-            }
-        }
-        
-        if (!data) {
-            throw new Error(`All Piped API instances failed.\nErrors:\n${errors.join('\n')}`);
-        }
-        
-        // Find a combined video+audio stream (typically 720p or 360p mp4)
-        let streamUrl = null;
-        if (data.videoStreams && data.videoStreams.length > 0) {
-            const combinedStreams = data.videoStreams.filter(s => s.videoOnly === false && s.mimeType === "video/mp4");
-            if (combinedStreams.length > 0) {
-                // Get highest quality combined stream
-                streamUrl = combinedStreams[0].url;
-            } else {
-                // Fallback to the first available stream if no combined stream is found
-                streamUrl = data.videoStreams[0].url;
-            }
-        }
-        
-        if (!streamUrl) {
-            throw new Error(`Piped did not return a valid video stream URL.`);
-        }
-        
-        res.write(`Got direct URL from Piped! Downloading to server...\n`);
-        
-        // Download from the direct URL
-        await downloadFile(streamUrl, outputPath);
+        await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+            cookies: path.join(__dirname, 'cookies.txt'),
+            noCheckCertificates: true,
+            jsRuntimes: 'node',
+            output: outputPath,
+            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        });
         
         res.write(`Download finished on server. Starting upload to Google Drive...\n`);
 
