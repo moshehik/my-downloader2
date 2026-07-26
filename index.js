@@ -126,8 +126,14 @@ app.get('/download', async (req, res) => {
     
     // Heartbeat to keep the connection alive (Render drops silent connections after 100s)
     const heartbeat = setInterval(() => {
-        res.write(' '); // JSON ignores whitespace
+        try {
+            res.write(' '); // JSON ignores whitespace
+        } catch(e) {
+            clearInterval(heartbeat);
+        }
     }, 15000);
+    
+    req.on('close', () => clearInterval(heartbeat));
 
     const ext = type === 'audio' ? 'mp3' : 'mp4';
     const outputFilename = `${videoId}.${ext}`;
@@ -162,7 +168,7 @@ app.get('/download', async (req, res) => {
             
             try {
                 // -P password, -0 store only (no compression), -j junk path (just the file)
-                await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`);
+                await execAsync(`zip -P 1234 -0j "${zipPath}" "${outputPath}"`, { maxBuffer: 1024 * 1024 * 10 }); // 10MB buffer
             } catch (zipErr) {
                 console.error("Native zip failed:", zipErr);
                 throw new Error("Failed to zip the file");
