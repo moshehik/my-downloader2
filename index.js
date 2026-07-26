@@ -81,6 +81,24 @@ app.post('/update-cookies', (req, res) => {
     }
 });
 
+app.get('/test-cobalt', async (req, res) => {
+    try {
+        const axios = require('axios');
+        const cobaltRes = await axios.post('https://api.cobalt.tools', {
+            url: 'https://www.youtube.com/watch?v=nvyWXABq4ww',
+            videoQuality: '720'
+        }, {
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+        res.json({ success: true, data: cobaltRes.data });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.response ? err.response.data : err.message });
+    }
+});
+
 const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
