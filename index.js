@@ -12,30 +12,24 @@ const PORT = process.env.PORT || 10000;
 
 app.use(express.json());
 
+// OAuth2 Credentials from the user's HTA file
+const CLIENT_ID = process.env.GMAIL_CLIENT_ID || "629598156840-0uflvae6os4f40dsgrr3l2263uc5j4bc.apps.googleusercontent.com";
+const CLIENT_SECRET = process.env.GMAIL_CLIENT_SECRET || "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";
+const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || "1//04hXXDkwmzKAcCgYIARAAGAQSNwF-L9IrwLS5Od9j4bEMGQf_ws1Q4JmYGLurmoFvJxAwQXfMR141KkLDl1Nu1qobjakWs9cCQ6o";
+
+const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, "https://developers.google.com/oauthplayground");
+oauth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+
+const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
 app.get('/', (req, res) => {
-    res.send("שרת ההורדות בענן פועל! הוסף /download?id=VIDEO_ID כדי להוריד.");
+    res.send("שרת הענן פועל! הוסף /download?id=VIDEO_ID כדי להוריד סרטון ולשמור אותו ישירות לדרייב.");
 });
 
-// Authentication for Google Drive
-async function getDriveService() {
-    const credsPath = path.join(__dirname, 'credentials.json');
-    if (!fs.existsSync(credsPath)) {
-        throw new Error("Missing credentials.json for Google Drive API.");
-    }
-    const auth = new google.auth.GoogleAuth({
-        keyFile: credsPath,
-        scopes: ['https://www.googleapis.com/auth/drive.file']
-    });
-    return google.drive({ version: 'v3', auth });
-}
-
 async function uploadToDrive(filePath, fileName) {
-    const drive = await getDriveService();
-    const folderId = process.env.DRIVE_FOLDER_ID; // The folder ID in user's Drive
-
     const fileMetadata = {
         name: fileName,
-        parents: folderId ? [folderId] : undefined
+        // We can upload to the root of the user's drive if no folderId is specified
     };
     
     const media = {
@@ -65,13 +59,12 @@ app.get('/download', async (req, res) => {
     console.log(`Starting download for: ${videoId}`);
     
     try {
-        // Send initial response so Render doesn't timeout
         res.write(`Starting background download for video ${videoId}...\n`);
         
-        // 1. Download Video using yt-dlp via youtube-dl-exec
+        // 1. Download Video using yt-dlp
         await youtubedl(url, {
-            cookies: 'cookies.txt', // Use the provided cookies file
-            format: 'best',         // Best pre-merged format to avoid ffmpeg merging issues on server
+            cookies: 'cookies.txt', // Use the provided cookies file to bypass bot checks
+            format: 'best',         // Best single file to avoid ffmpeg merging issues
             output: outputPath,
             noCheckCertificates: true
         });
@@ -94,7 +87,6 @@ app.get('/download', async (req, res) => {
         res.write(`\nError occurred: ${error.message}\n`);
         res.end();
         
-        // Cleanup on error
         if (fs.existsSync(outputPath)) {
             fs.unlinkSync(outputPath);
         }
