@@ -97,7 +97,8 @@ app.get('/download', async (req, res) => {
         });
 
         if (!cobaltResponse.ok) {
-            throw new Error(`Cobalt API failed: ${cobaltResponse.status} ${cobaltResponse.statusText}`);
+            const errText = await cobaltResponse.text();
+            throw new Error(`Cobalt API failed: ${cobaltResponse.status} ${cobaltResponse.statusText} - ${errText}`);
         }
 
         const data = await cobaltResponse.json();
