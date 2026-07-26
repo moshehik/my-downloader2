@@ -80,7 +80,7 @@ app.get('/download', async (req, res) => {
         res.write(`Starting background download via Cobalt API for video ${videoId}...\n`);
         
         // 1. Get Direct URL from Cobalt API
-        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+        const cobaltResponse = await fetch('https://api.cobalt.tools/', {
             method: 'POST',
             headers: {
                 'Accept': 'application/json',
@@ -88,11 +88,7 @@ app.get('/download', async (req, res) => {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
             },
             body: JSON.stringify({
-                url: url,
-                vCodec: "h264",
-                vQuality: "1080",
-                aFormat: "best",
-                isAudioOnly: false
+                url: url
             })
         });
 
