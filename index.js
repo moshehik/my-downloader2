@@ -81,20 +81,7 @@ app.post('/update-cookies', (req, res) => {
     }
 });
 
-app.get('/debug-cookies', (req, res) => {
-    try {
-        const cPath = path.join(__dirname, 'cookies.txt');
-        if (fs.existsSync(cPath)) {
-            const stat = fs.statSync(cPath);
-            const content = fs.readFileSync(cPath, 'utf8');
-            res.send(`Last updated: ${stat.mtime}\nSize: ${stat.size} bytes\nLines: ${content.split('\\n').length}\nContent Preview:\n${content.substring(0, 300)}`);
-        } else {
-            res.send('No cookies.txt found');
-        }
-    } catch(err) { res.send(err.message); }
-});
-
-const axios = require('axios');
+const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
@@ -115,42 +102,21 @@ app.get('/download', async (req, res) => {
     const outputPath = path.join(__dirname, outputFilename);
 
     try {
-        // Step 1: Call Cobalt API to get the stream URL (Bypasses YouTube 429)
-        const cobaltReq = {
-            url: `https://www.youtube.com/watch?v=${videoId}`,
-            vCodec: 'h264',
-            vQuality: '720',
-            aFormat: 'mp3',
-            isAudioOnly: type === 'audio'
+        const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+        const options = {
+            cookies: path.join(__dirname, 'cookies.txt'),
+            noCheckCertificates: true,
+            jsRuntimes: 'node',
+            output: outputPath,
+            format: formatArg
         };
         
-        const cobaltRes = await axios.post('https://api.cobalt.tools/api/json', cobaltReq, {
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!cobaltRes.data || !cobaltRes.data.url) {
-            throw new Error('Failed to get stream URL from Cobalt API');
+        if (type === 'audio') {
+            options.extractAudio = true;
+            options.audioFormat = 'mp3';
         }
         
-        const streamUrl = cobaltRes.data.url;
-        
-        // Step 2: Download the file to our Render server disk
-        const downloadRes = await axios({
-            method: 'GET',
-            url: streamUrl,
-            responseType: 'stream'
-        });
-        
-        await new Promise((resolve, reject) => {
-            const writer = fs.createWriteStream(outputPath);
-            downloadRes.data.pipe(writer);
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-        });
-
+        await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
         
         let finalFilename = outputFilename;
         
