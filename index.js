@@ -69,6 +69,7 @@ app.get('/download', async (req, res) => {
         // 1. Download Video using yt-dlp
         await youtubedl(url, {
             cookies: cookiesPath,   // Absolute path to cookies file
+            extractorArgs: 'youtube:player_client=android', // Bypass bot block on data centers
             format: 'b',            // Suppress "best" warning
             jsRuntimes: 'node',     // Fix missing JS runtime warning
             output: outputPath,
