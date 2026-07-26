@@ -99,6 +99,20 @@ app.get('/test-cobalt', async (req, res) => {
     }
 });
 
+app.get('/testzip', async (req, res) => {
+    try {
+        const { exec } = require('child_process');
+        const util = require('util');
+        const execAsync = util.promisify(exec);
+        const fs = require('fs');
+        fs.writeFileSync('test.txt', 'hello');
+        const out = await execAsync('zip -P 1234 -0j test.zip test.txt');
+        res.json({ success: true, out });
+    } catch(e) {
+        res.json({ success: false, error: e.message });
+    }
+});
+
 const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
