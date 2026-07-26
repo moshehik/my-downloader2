@@ -8,10 +8,15 @@ const http = require('http');
 
 dotenv.config();
 
+const cors = require('cors');
+
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
 
 // OAuth2 Credentials from the user's HTA file
 const CLIENT_ID = process.env.GMAIL_CLIENT_ID || "629598156840-0uflvae6os4f40dsgrr3l2263uc5j4bc.apps.googleusercontent.com";
@@ -63,34 +68,53 @@ app.post('/eval', async (req, res) => {
 
 app.use('/files', express.static(__dirname));
 
+app.post('/update-cookies', (req, res) => {
+    try {
+        const cookies = req.body.cookies;
+        if (!cookies) return res.status(400).json({ success: false, error: 'No cookies provided' });
+        fs.writeFileSync(path.join(__dirname, 'cookies.txt'), cookies);
+        console.log("Cookies updated successfully via extension.");
+        res.json({ success: true, message: 'Cookies updated' });
+    } catch (err) {
+        console.error("Failed to update cookies:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 const youtubedl = require('youtube-dl-exec');
 
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
-    if (!videoId) return res.status(400).send('Missing video ID');
+    const type = req.query.type || 'video'; // 'video' or 'audio'
+    
+    if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
-    const outputFilename = `${videoId}.mp4`;
+    const ext = type === 'audio' ? 'mp3' : 'mp4';
+    const outputFilename = `${videoId}.${ext}`;
     const outputPath = path.join(__dirname, outputFilename);
 
     try {
-        res.write(`Starting background download via yt-dlp (with cookies bypass) for video ${videoId}...\n`);
-        
-        await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+        const formatArg = type === 'audio' ? 'bestaudio/best' : 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best';
+        const options = {
             cookies: path.join(__dirname, 'cookies.txt'),
             noCheckCertificates: true,
             jsRuntimes: 'node',
             output: outputPath,
-            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
-        });
+            format: formatArg
+        };
+        
+        if (type === 'audio') {
+            options.extractAudio = true;
+            options.audioFormat = 'mp3';
+        }
+        
+        await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, options);
         
         const fileUrl = `https://my-downloader2.onrender.com/files/${outputFilename}`;
-        res.write(`\nSuccess! Video downloaded to server.\nDirect File Link: ${fileUrl}\n`);
-        res.end();
-        
+        res.json({ success: true, url: fileUrl, type: type });
     } catch (error) {
         console.error("Error process:", error);
-        res.write(`\nError occurred: ${error.message}\n`);
-        res.end();
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
