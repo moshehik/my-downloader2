@@ -23,6 +23,24 @@ process.on('unhandledRejection', (reason, promise) => {
     process.exit(1);
 });
 
+const debugLogs = [];
+const origLog = console.log;
+const origError = console.error;
+console.log = (...args) => {
+    origLog(...args);
+    debugLogs.push(`[LOG] ${new Date().toISOString()} ${args.join(' ')}`);
+    if (debugLogs.length > 200) debugLogs.shift();
+};
+console.error = (...args) => {
+    origError(...args);
+    debugLogs.push(`[ERR] ${new Date().toISOString()} ${args.join(' ')}`);
+    if (debugLogs.length > 200) debugLogs.shift();
+};
+
+app.get('/debug-logs', (req, res) => {
+    res.type('text').send(debugLogs.join('\n'));
+});
+
 app.get('/crashlogs', (req, res) => {
     if (fs.existsSync('crash.log')) {
         res.send(fs.readFileSync('crash.log', 'utf8'));
@@ -165,25 +183,30 @@ app.all('/download', async (req, res) => {
                 log('ההעלאה לדרייב הסתיימה בהצלחה!');
                 
                 if (emailStr) {
-                    log(`שולח אימייל לכתובת: ${emailStr}...`);
-                    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-                    const emailLines = [
-                        `To: ${emailStr}`,
-                        `Subject: =?utf-8?B?${Buffer.from("ההורדה שלך מיוטיוב מוכנה!").toString('base64')}?=`,
-                        `Content-Type: text/html; charset=utf-8`,
-                        ``,
-                        `<div dir="rtl">`,
-                        `<h3>הקובץ שלך מוכן</h3>`,
-                        `<p>הורדת את הסרטון בהצלחה. הקובץ נשמר בגוגל דרייב שלך.</p>`,
-                        `<p><a href="${driveLink}">לחץ כאן כדי לצפות או להוריד את הקובץ מהדרייב</a></p>`,
-                        `</div>`
-                    ];
-                    const emailRaw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-                    await gmail.users.messages.send({
-                        userId: 'me',
-                        requestBody: { raw: emailRaw }
-                    });
-                    log('אימייל נשלח בהצלחה!');
+                    try {
+                        log(`שולח אימייל לכתובת: ${emailStr}...`);
+                        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+                        const emailLines = [
+                            `To: ${emailStr}`,
+                            `Subject: =?utf-8?B?${Buffer.from("ההורדה שלך מיוטיוב מוכנה!").toString('base64')}?=`,
+                            `Content-Type: text/html; charset=utf-8`,
+                            ``,
+                            `<div dir="rtl">`,
+                            `<h3>הקובץ שלך מוכן</h3>`,
+                            `<p>הורדת את הסרטון בהצלחה. הקובץ נשמר בגוגל דרייב שלך.</p>`,
+                            `<p><a href="${driveLink}">לחץ כאן כדי לצפות או להוריד את הקובץ מהדרייב</a></p>`,
+                            `</div>`
+                        ];
+                        const emailRaw = Buffer.from(emailLines.join('\r\n')).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                        await gmail.users.messages.send({
+                            userId: 'me',
+                            requestBody: { raw: emailRaw }
+                        });
+                        log('אימייל נשלח בהצלחה!');
+                    } catch (emailErr) {
+                        console.error("Email send failed:", emailErr);
+                        log('שגיאה בשליחת האימייל (חסרות הרשאות), אבל הקובץ בדרייב!');
+                    }
                 }
             }
             
