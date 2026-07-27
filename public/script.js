@@ -68,21 +68,12 @@ document.addEventListener('DOMContentLoaded', () => {
         errorMessage.style.display = 'none';
 
         try {
-            const payload = {
-                id: videoId,
-                type: format,
-                zip: zipOption,
-                drive: driveOption,
-                email: emailVal
-            };
+            let reqUrl = `/download?id=${encodeURIComponent(videoId)}&type=${encodeURIComponent(format)}`;
+            if (zipOption) reqUrl += '&zip=true';
+            if (driveOption) reqUrl += '&drive=true';
+            if (driveOption && emailVal) reqUrl += `&email=${encodeURIComponent(emailVal)}`;
             
-            const response = await fetch('/download', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
+            const response = await fetch(reqUrl);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
