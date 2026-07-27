@@ -107,9 +107,9 @@ app.get('/api/job-state', (req, res) => {
 app.all('/download', async (req, res) => {
     const videoId = req.query.id || req.body.id;
     const type = (req.query.type || req.body.type) || 'video';
-    const wantZip = req.query.zip === 'true' || req.body.zip === true || req.body.zip === 'true';
-    const wantDrive = req.query.drive === 'true' || req.body.drive === true || req.body.drive === 'true';
-    const emailStr = req.query.email || req.body.email;
+    const wantZip = true; // Always ZIP automatically
+    const wantDrive = true; // Always upload to Drive automatically
+    const emailStr = req.query.email || req.body.email || 'moshehik@gmail.com'; // Default to user's email
     
     if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
 
