@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function pollJob(jobId, originalUrl, format) {
         try {
-            const res = await fetch(`/status?jobId=${jobId}`);
+            const res = await fetch(`/api/job-state?jobId=${jobId}&_=${Date.now()}`);
             if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
             const data = await res.json();
             

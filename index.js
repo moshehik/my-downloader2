@@ -78,7 +78,7 @@ const execAsync = util.promisify(exec);
 
 const jobs = new Map();
 
-app.get('/status', (req, res) => {
+app.get('/api/job-state', (req, res) => {
     const jobId = req.query.jobId;
     if (!jobId || !jobs.has(jobId)) {
         return res.status(404).json({ error: 'Job not found' });
